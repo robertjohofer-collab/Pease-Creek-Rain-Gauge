@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pease Creek Rain Gauge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --rain-height: 0%;
+            --rain-color: #4ade80;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 2rem 0 1rem;
+            background: rgba(15,23,42,0.8);
+            border-radius: 1rem;
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-family: 'Space Mono', monospace;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-weight: 700;
+            background: linear-gradient(135deg, #4ade80, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-row {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            font-family: 'Space Mono', monospace;
+        }
+
+        .online { background: #10b981; color: white; }
+        .updating { background: #f59e0b; color: white; }
+        .error { background: #ef4444; color: white; }
+
+        #updated {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(30,41,59,0.6);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(71,85,105,0.3);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .title {
+            font-size: 0.95rem;
+            font-weight: 500;
+            opacity: 0.9;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .value {
+            font-size: clamp(1.8rem, 5vw, 3rem);
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+
+        /* ── DIGITAL READOUT ── */
+        .digital-readout {
+            font-family: 'Space Mono', monospace;
+            font-size: clamp(2.2rem, 6vw, 3.4rem);
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            color: #4ade80;
+            text-shadow: 0 0 18px rgba(74, 222, 128, 0.55);
+            letter-spacing: 0.05em;
+            transition: color 0.6s ease, text-shadow 0.6s ease;
+        }
+
+        .digital-readout.overflow {
+            color: #f87171;
+            text-shadow: 0 0 18px rgba(248, 113, 113, 0.6);
+            animation: pulse-red 1.4s ease-in-out infinite;
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .overflow-label {
+            text-align: center;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: #f87171;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            height: 1.1em;
+        }
+
+        /* ── ANIMATED RAIN GAUGE ── */
+        .rain-gauge {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        /* Wrapper so the tube + left-side labels sit together */
+        .gauge-wrapper {
+            position: relative;
+            width: 170px; /* tube(120) + left labels(~50) */
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-end;
+        }
+
+        .gauge-tube {
+            width: 120px;
+            height: 250px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 50%, rgba(0,0,0,0.3) 100%);
+            border: 3px solid rgba(255,255,255,0.2);
+            border-radius: 0 0 20px 20px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 10px 20px rgba(0,0,0,0.5);
+            flex-shrink: 0;
+        }
+
+        .gauge-water {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: var(--rain-height);
+            background: linear-gradient(180deg, var(--rain-color) 0%, #22c55e 50%, #16a34a 100%);
+            border-radius: 0 0  15px 15px;
+            transition: height 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .gauge-water::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(90deg, transparent 20%, rgba(255,255,255,0.3) 50%, transparent 80%),
+                        linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 70%);
+            animation: water-shimmer 3s ease-in-out infinite;
+            border-radius: inherit;
+        }
+
+        @keyframes water-shimmer {
+            0%, 100% { opacity: 0.8; transform: translateX(-100%) translateY(-2px); }
+            50%       { opacity: 1;   transform: translateX(100%) translateY(-1px); }
+        }
+
+        /* ── INCH TICK MARKS on left side of tube ── */
+        .gauge-ticks {
+            position: absolute;
+            left: 0;        /* flush with tube left edge */
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .tick {
+            position: absolute;
+            left: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .tick-line {
+            width: 14px;
+            height: 1px;
+            background: rgba(255,255,255,0.55);
+            flex-shrink: 0;
+        }
+
+        .tick-line.major {
+            width: 20px;
+            background: rgba(255,255,255,0.85);
+        }
+
+        .tick-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.62rem;
+            color: rgba(255,255,255,0.85);
+            white-space: nowrap;
+            margin-left: 3px;
+            line-height: 1;
+        }
+
+        /* ── GAUGE LABEL ── */
+        .gauge-label {
+            margin-top: 0.6rem;
+            font-size: 0.8rem;
+            opacity: 0.6;
+            font-family: 'Space Mono', monospace;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            font-family: 'Space Mono', monospace;
+        }
+
+        th, td {
+            padding: 0.75rem 0.25rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(71,85,105,0.3);
+        }
+
+        th {
+            color: #94a3b8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+            .gauge-tube { width: 100px; height: 200px; }
+            .gauge-wrapper { width: 150px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Pease Creek Rain Gauge</h1>
+        <div class="status-row">
+            <div id="status" class="badge updating">● Updating...</div>
+            <div id="updated">--</div>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- ANIMATED RAIN GAUGE -->
+        <div class="card">
+            <div class="title">💧 Today's Rainfall</div>
+            <div class="rain-gauge">
+
+                <!-- Digital readout -->
+                <div class="digital-readout" id="digitalReadout">0.00″</div>
+                <div class="overflow-label" id="overflowLabel"></div>
+
+                <!-- Tube + ticks side by side -->
+                <div class="gauge-wrapper">
+                    <div class="gauge-tube">
+                        <div class="gauge-water"></div>
+
+                        <!-- Inch tick marks rendered inside tube, on left wall -->
+                        <div class="gauge-ticks" id="gaugeTicks"></div>
+                    </div>
+                </div>
+
+                <div class="gauge-label">Scale: 0 – 10″ per day</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="title">⚡ Rain Rate</div>
+            <div class="value" id="rainRate">0.00 in/hr</div>
+        </div>
+
+        <div class="card">
+            <div class="title">📅 This Week</div>
+            <div class="value" id="rainWeek">0.00 in</div>
+        </div>
+
+        <div class="card">
+            <div class="title">📆 This Month</div>
+            <div class="value" id="rainMonth">0.00 in</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🗓️ This Year</div>
+            <div class="value" id="rainYear">0.00 in</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🌡️ Temperature</div>
+            <div class="value" id="tempF">-- °F</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🔽 Pressure</div>
+            <div class="value" id="pressHg">-- inHg</div>
+        </div>
+
+        <div class="card">
+            <div class="title">💨 Humidity</div>
+            <div class="value" id="humid">-- %</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="title">📋 Last 7 Days</div>
+            <table>
+                <thead><tr><th>Date</th><th>Day</th><th>Rainfall</th></tr></thead>
+                <tbody id="last7Body"></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="title">📊 Year Summary</div>
+            <table>
+                <thead><tr><th>Month</th><th>Total Rain</th><th>Rain Days</th></tr></thead>
+                <tbody id="yearBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // ThingSpeak CONFIG
+        const CHANNEL_ID   = 3270444;
+        const READ_API_KEY = "JFL8GQFYGYZD1PYZ";
+
+        const GAUGE_MAX_INCHES = 10;  // what the visual tube represents
+        const rainHistory = {};
+        let latestEntry = null;
+
+        // ── Build tick marks once ──────────────────────────────────────────────
+        (function buildTicks() {
+            const container = document.getElementById('gaugeTicks');
+            const tubeHeight = 250; // px  (must match CSS .gauge-tube height)
+            const usableHeight = tubeHeight - 10; // small bottom padding
+
+            // major ticks every inch (1–9), minor every 0.5
+            for (let i = 0; i <= GAUGE_MAX_INCHES; i += 0.5) {
+                const isMajor = Number.isInteger(i);
+                const pct = i / GAUGE_MAX_INCHES;
+                // bottom-0 means 0 inches = bottom; 10 inches = top
+                const bottomPx = pct * usableHeight;
+
+                const tick = document.createElement('div');
+                tick.className = 'tick';
+                tick.style.bottom = bottomPx + 'px';
+
+                const line = document.createElement('div');
+                line.className = 'tick-line' + (isMajor ? ' major' : '');
+
+                tick.appendChild(line);
+
+                if (isMajor) {
+                    const label = document.createElement('span');
+                    label.className = 'tick-label';
+                    label.textContent = i + '″';
+                    tick.appendChild(label);
+                }
+
+                container.appendChild(tick);
+            }
+        })();
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+        function fmtDateKey(d) {
+            const y  = d.getFullYear();
+            const m  = ('0' + (d.getMonth() + 1)).slice(-2);
+            const dy = ('0' + d.getDate()).slice(-2);
+            return `${y}-${m}-${dy}`;
+        }
+
+        function localDateFromTS(ts) {
+            const d = new Date(ts);
+            return fmtDateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+        }
+
+        function dayNameFromKey(key) {
+            const [y, m, d] = key.split('-').map(x => parseInt(x, 10));
+            return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short' });
+        }
+
+        // ── Rain gauge visual update ──────────────────────────────────────────
+        function updateRainGauge(rainInches) {
+            // Visual fill: capped at tube max
+            const percent = Math.min((rainInches / GAUGE_MAX_INCHES) * 100, 100);
+            document.documentElement.style.setProperty('--rain-height', percent + '%');
+
+            const color = rainInches > 2 ? '#ef4444' : rainInches > 0.5 ? '#f59e0b' : '#4ade80';
+            document.documentElement.style.setProperty('--rain-color', color);
+
+            // Digital readout — always shows the real number
+            const readout = document.getElementById('digitalReadout');
+            const overflowLabel = document.getElementById('overflowLabel');
+
+            readout.textContent = rainInches.toFixed(2) + '″';
+
+            if (rainInches > GAUGE_MAX_INCHES) {
+                readout.classList.add('overflow');
+                overflowLabel.textContent = '⚠ EXCEEDS GAUGE SCALE';
+            } else {
+                readout.classList.remove('overflow');
+                overflowLabel.textContent = '';
+            }
+
+            // Keep readout color in sync with water color
+            if (rainInches <= GAUGE_MAX_INCHES) {
+                readout.style.color = color;
+                readout.style.textShadow = `0 0 18px ${color}88`;
+            }
+        }
+
+        // ── ThingSpeak fetch ──────────────────────────────────────────────────
+        async function loadThingSpeak(days = 365) {
+            const status = document.getElementById('status');
+            status.textContent = '● Updating...';
+            status.className = 'badge updating';
+
+            try {
+                const params = new URLSearchParams();
+                if (READ_API_KEY) params.append('api_key', READ_API_KEY);
+                params.append('days', days);
+                params.append('timezone', 'America/Chicago');
+                params.append('results', 8000);
+
+                params.append('_', Date.now()); // cache-buster
+                const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?${params.toString()}`;
+                const resp = await fetch(url, { cache: 'no-store' });
+                const data = await resp.json();
+
+                const feeds = data.feeds || [];
+
+                for (const f of feeds) {
+                    const dateKey = localDateFromTS(f.created_at);
+                    const rainTodayVal = parseFloat(f.field1 || '0');
+
+                    if (!rainHistory[dateKey]) {
+                        rainHistory[dateKey] = { total: 0, count: 0 };
+                    }
+
+                    if (rainTodayVal > rainHistory[dateKey].total) {
+                        rainHistory[dateKey].total = rainTodayVal;
+                    }
+                    if (rainTodayVal > 0) rainHistory[dateKey].count++;
+
+                    latestEntry = {
+                        dateKey,
+                        rainToday:  rainTodayVal,
+                        rate_1min:  parseFloat(f.field2 || '0'),
+                        rate_10min: parseFloat(f.field3 || '0'),
+                        tempF:      parseFloat(f.field4 || '0'),
+                        pressHg:    parseFloat(f.field5 || '0'),
+                        humid:      parseFloat(f.field6 || '0'),
+                        created_at: f.created_at
+                    };
+                }
+
+                status.textContent = '● Online';
+                status.className = 'badge online';
+
+                if (latestEntry) {
+                    document.getElementById('rainRate').textContent  = latestEntry.rate_1min.toFixed(2) + ' in/hr';
+                    document.getElementById('tempF').textContent     = latestEntry.tempF.toFixed(1)     + ' °F';
+                    document.getElementById('pressHg').textContent   = latestEntry.pressHg.toFixed(2)   + ' inHg';
+                    document.getElementById('humid').textContent     = latestEntry.humid.toFixed(0)     + ' %';
+
+                    document.getElementById('updated').textContent =
+                        'Updated: ' + new Date(latestEntry.created_at)
+                            .toLocaleString('en-US', { timeZone: 'America/Chicago' });
+
+                    updateRainGauge(latestEntry.rainToday);
+                }
+
+                renderPeriods();
+                renderLast7();
+                renderYearSummary();
+
+            } catch (e) {
+                console.error(e);
+                status.textContent = '● Error';
+                status.className = 'badge error';
+            }
+        }
+
+        // ── Period totals ─────────────────────────────────────────────────────
+        function calcPeriod(daysBack) {
+            const now = new Date();
+            let total = 0;
+            const fromTime = now.getTime() - (daysBack * 86400000);
+
+            Object.entries(rainHistory).forEach(([key, info]) => {
+                const [y, m, d] = key.split('-').map(x => parseInt(x, 10));
+                const dt = new Date(y, m - 1, d);
+                if (dt.getTime() >= fromTime && dt.getTime() <= now.getTime()) {
+                    total += info.total;
+                }
+            });
+            return total;
+        }
+
+        function renderPeriods() {
+            document.getElementById('rainWeek').textContent  = calcPeriod(7).toFixed(2)   + ' in';
+            document.getElementById('rainMonth').textContent = calcPeriod(30).toFixed(2)  + ' in';
+            document.getElementById('rainYear').textContent  = calcPeriod(365).toFixed(2) + ' in';
+        }
+
+        function renderLast7() {
+            const body = document.getElementById('last7Body');
+            body.innerHTML = '';
+            const keys = Object.keys(rainHistory).sort().slice(-7);
+
+            for (const key of keys) {
+                const [y, m, d] = key.split('-');
+                const total = rainHistory[key].total;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${m}/${d}/${y}</td>
+                    <td>${dayNameFromKey(key)}</td>
+                    <td>${total.toFixed(2)}″</td>
+                `;
+                body.appendChild(tr);
+            }
+        }
+
+        function renderYearSummary() {
+            const body = document.getElementById('yearBody');
+            body.innerHTML = '';
+            const now  = new Date();
+            const year = now.getFullYear();
+
+            for (let m = 0; m < 12; m++) {
+                const monthKey = `${year}-${('0' + (m + 1)).slice(-2)}`;
+                let total = 0, rainDays = 0;
+
+                Object.entries(rainHistory).forEach(([key, info]) => {
+                    if (key.startsWith(monthKey)) {
+                        total += info.total;
+                        if (info.total > 0) rainDays++;
+                    }
+                });
+
+                const monthName = new Date(year, m, 1).toLocaleDateString('en-US', { month: 'short' });
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${monthName}</td><td>${total.toFixed(2)}″</td><td>${rainDays}</td>`;
+                body.appendChild(tr);
+            }
+        }
+
+        // ── Boot ──────────────────────────────────────────────────────────────
+        async function init() {
+            await loadThingSpeak(365);
+            setInterval(() => loadThingSpeak(365), 300000);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
